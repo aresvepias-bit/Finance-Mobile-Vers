@@ -14,6 +14,10 @@ import {
   Settings,
   LogOut,
   RefreshCw,
+  Landmark,
+  Split,
+  Eye,
+  EyeOff,
   Lock,
   User as UserIcon,
   Menu,
@@ -35,6 +39,8 @@ import { SubscriptionView } from "@/components/SubscriptionView";
 import { InventoryView } from "@/components/InventoryView";
 import { BudgetView } from "@/components/BudgetView";
 import { ConfigView } from "@/components/ConfigView";
+import { InstallmentView } from "@/components/InstallmentView";
+import { PocketView } from "@/components/PocketView";
 import { CustomConfirmAlert } from "@/components/ui/CustomConfirmAlert";
 
 export default function Page() {
@@ -46,6 +52,8 @@ export default function Page() {
     login,
     logout,
     refreshData,
+    hideNumbers,
+    toggleHideNumbers,
   } = useAppState();
 
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -65,6 +73,8 @@ export default function Page() {
     { id: "portfolio", label: "Portofolio Aset", icon: PieChart },
     { id: "ecommerce", label: "E-Commerce", icon: ShoppingBag },
     { id: "subscription", label: "Tagihan Langganan", icon: Calendar },
+    { id: "installment", label: "Cicilan & Hutang", icon: Landmark },
+    { id: "pocket", label: "Pos Alokasi", icon: Split },
     { id: "inventory", label: "Inventaris Barang", icon: Package },
     { id: "budget", label: "Anggaran Kategori", icon: PiggyBank },
     { id: "configuration", label: "Pengaturan & Kategori", icon: Settings },
@@ -207,6 +217,10 @@ export default function Page() {
         return <EcommerceView />;
       case "subscription":
         return <SubscriptionView />;
+      case "installment":
+        return <InstallmentView />;
+      case "pocket":
+        return <PocketView />;
       case "inventory":
         return <InventoryView />;
       case "budget":
@@ -246,6 +260,20 @@ export default function Page() {
               title="Sinkronisasi Data"
             >
               <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Sembunyikan / tampilkan nominal */}
+            <button
+              onClick={toggleHideNumbers}
+              className={`p-1.5 rounded-lg border transition-all ${
+                hideNumbers
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                  : "border-slate-800 hover:border-slate-700 hover:bg-slate-800 text-slate-500 hover:text-white"
+              }`}
+              title={hideNumbers ? "Tampilkan nominal" : "Sembunyikan nominal"}
+              aria-pressed={hideNumbers}
+            >
+              {hideNumbers ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
             </button>
 
             {/* Collapse toggle button */}
@@ -332,6 +360,18 @@ export default function Page() {
             }`}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} />
+          </button>
+          <button
+            onClick={toggleHideNumbers}
+            className={`p-2 rounded-lg border ${
+              hideNumbers
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                : "border-slate-800 bg-slate-950/40 text-slate-400 hover:text-white"
+            }`}
+            title={hideNumbers ? "Tampilkan nominal" : "Sembunyikan nominal"}
+            aria-pressed={hideNumbers}
+          >
+            {hideNumbers ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </button>
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}

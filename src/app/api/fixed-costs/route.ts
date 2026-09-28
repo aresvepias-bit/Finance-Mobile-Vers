@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { categoryErrorResponse, resolveCategory } from "@/lib/categoryResolver";
 
 export async function GET() {
   try {
@@ -17,6 +18,8 @@ export async function GET() {
       id: fc.id,
       name: fc.name,
       amount: Number(fc.amount),
+      categoryId: fc.categoryId,
+      subCategoryId: fc.subCategoryId,
       category_id: fc.category.name, // To match the old frontend attribute naming
       sub_category_id: fc.subCategory?.name || "",
     }));
@@ -32,32 +35,25 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { name, amount, categoryName } = await request.json();
+    const { name, amount, categoryId } = await request.json();
 
-    if (!name || !amount || !categoryName) {
+    if (!name || !amount) {
       return NextResponse.json(
         { status: "error", message: "Data template tidak lengkap!" },
         { status: 400 }
       );
     }
 
-    // Resolve Category ID
-    let category = await prisma.category.findFirst({
-      where: { name: categoryName, type: "expense" },
-    });
-
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: categoryName, type: "expense" },
-      });
-    }
+    const { rootId, subId } = await resolveCategory(categoryId, "expense");
 
     const fixedCost = await prisma.fixedCost.create({
       data: {
         name,
         amount: parseFloat(amount),
-        categoryId: category.id,
+        categoryId: rootId,
+        subCategoryId: subId,
       },
+      include: { category: true, subCategory: true },
     });
 
     return NextResponse.json({
@@ -67,10 +63,15 @@ export async function POST(request: Request) {
         id: fixedCost.id,
         name: fixedCost.name,
         amount: Number(fixedCost.amount),
-        category_id: category.name,
+        categoryId: fixedCost.categoryId,
+        subCategoryId: fixedCost.subCategoryId,
+        category_id: fixedCost.category.name,
+        sub_category_id: fixedCost.subCategory?.name || "",
       },
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }

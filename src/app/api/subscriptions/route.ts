@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { categoryErrorResponse, resolveCategory } from "@/lib/categoryResolver";
 
 export async function GET() {
   try {
@@ -28,6 +29,8 @@ export async function GET() {
 
     return NextResponse.json({ status: "success", data: formatted });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }
@@ -38,24 +41,16 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, email, amount, billingCycle, dueDate, categoryName, bankId } = body;
+    const { name, email, amount, billingCycle, dueDate, categoryId, bankId } = body;
 
-    if (!name || !amount || !billingCycle || !dueDate || !categoryName || !bankId) {
+    if (!name || !amount || !billingCycle || !dueDate || !bankId) {
       return NextResponse.json(
         { status: "error", message: "Data langganan tidak lengkap!" },
         { status: 400 }
       );
     }
 
-    // Resolve Category
-    let category = await prisma.category.findFirst({
-      where: { name: categoryName, type: "expense" },
-    });
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: categoryName, type: "expense" },
-      });
-    }
+    const { leafId } = await resolveCategory(categoryId, "expense");
 
     const subscription = await prisma.subscription.create({
       data: {
@@ -64,7 +59,7 @@ export async function POST(request: Request) {
         amount: parseFloat(amount),
         billingCycle,
         dueDate: new Date(dueDate),
-        categoryId: category.id,
+        categoryId: leafId,
         bankId,
         status: "active",
       },
@@ -76,6 +71,8 @@ export async function POST(request: Request) {
       data: subscription,
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }
@@ -86,24 +83,16 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, name, email, amount, billingCycle, dueDate, categoryName, bankId, status } = body;
+    const { id, name, email, amount, billingCycle, dueDate, categoryId, bankId, status } = body;
 
-    if (!id || !name || !amount || !billingCycle || !dueDate || !categoryName || !bankId) {
+    if (!id || !name || !amount || !billingCycle || !dueDate || !bankId) {
       return NextResponse.json(
         { status: "error", message: "Data lengkap wajib disertakan!" },
         { status: 400 }
       );
     }
 
-    // Resolve Category
-    let category = await prisma.category.findFirst({
-      where: { name: categoryName, type: "expense" },
-    });
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: categoryName, type: "expense" },
-      });
-    }
+    const { leafId } = await resolveCategory(categoryId, "expense");
 
     const subscription = await prisma.subscription.update({
       where: { id },
@@ -113,7 +102,7 @@ export async function PUT(request: Request) {
         amount: parseFloat(amount),
         billingCycle,
         dueDate: new Date(dueDate),
-        categoryId: category.id,
+        categoryId: leafId,
         bankId,
         status: status || "active",
       },
@@ -125,6 +114,8 @@ export async function PUT(request: Request) {
       data: subscription,
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }
@@ -153,6 +144,8 @@ export async function DELETE(request: Request) {
       message: "Tagihan langganan berhasil dihapus",
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }

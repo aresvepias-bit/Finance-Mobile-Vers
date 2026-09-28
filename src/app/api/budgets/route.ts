@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { categoryErrorResponse, resolveCategory } from "@/lib/categoryResolver";
 
 export async function GET(request: Request) {
   try {
@@ -26,6 +27,7 @@ export async function GET(request: Request) {
       categoryId: b.categoryId,
       category: b.category.name, // Return name directly to match old code
       limit: Number(b.limit),
+      note: b.note || "",
     }));
 
     return NextResponse.json({ status: "success", data: formatted });
@@ -39,9 +41,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { month, categoryName, limit } = await request.json();
+    const { month, categoryId, limit, note } = await request.json();
 
-    if (!month || !categoryName || !limit) {
+    if (!month || !limit) {
       return NextResponse.json(
         { status: "error", message: "Data budget tidak lengkap!" },
         { status: 400 }
@@ -50,17 +52,10 @@ export async function POST(request: Request) {
 
     const limitVal = parseFloat(limit);
 
-    // Resolve Category ID
-    const category = await prisma.category.findFirst({
-      where: { name: categoryName, type: "expense" },
-    });
-
-    if (!category) {
-      return NextResponse.json(
-        { status: "error", message: `Kategori "${categoryName}" tidak ditemukan!` },
-        { status: 404 }
-      );
-    }
+    // Budget bisa di kategori utama atau subkategori
+    const { leafId } = await resolveCategory(categoryId, "expense");
+    const category = await prisma.category.findUniqueOrThrow({ where: { id: leafId } });
+    const noteVal = typeof note === "string" && note.trim() ? note.trim() : null;
 
     // Upsert budget using @@unique([month, categoryId])
     const budget = await prisma.budget.upsert({
@@ -72,11 +67,13 @@ export async function POST(request: Request) {
       },
       update: {
         limit: limitVal,
+        note: noteVal,
       },
       create: {
         month,
         categoryId: category.id,
         limit: limitVal,
+        note: noteVal,
       },
     });
 
@@ -89,9 +86,12 @@ export async function POST(request: Request) {
         categoryId: budget.categoryId,
         category: category.name,
         limit: Number(budget.limit),
+        note: budget.note || "",
       },
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }

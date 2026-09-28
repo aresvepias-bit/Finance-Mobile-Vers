@@ -10,6 +10,7 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Migrasi lewat koneksi session-mode (5432); pooler transaksi (6543) tidak mendukungnya
+    url: process.env["DIRECT_URL"] || process.env["DATABASE_URL"],
   },
 });

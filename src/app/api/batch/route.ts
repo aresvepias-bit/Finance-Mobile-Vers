@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { listCategoriesWithUsage } from "@/lib/categoryResolver";
+import { listInstallments } from "@/lib/installmentServer";
+import { listPockets } from "@/lib/pocketServer";
+
+// Label kategori lengkap "Utama › Sub"
+const catLabel = (c: { name: string; parent?: { name: string } | null }) =>
+  c.parent ? `${c.parent.name} › ${c.name}` : c.name;
+const withParent = { include: { parent: true } } as const;
 
 export async function GET() {
   try {
     // 1. Fetch categories
-    const categories = await prisma.category.findMany({
-      orderBy: { name: "asc" },
-    });
+    const categories = await listCategoriesWithUsage();
 
     // 2. Fetch banks and calculate live balances
     const banks = await prisma.bank.findMany({
@@ -38,36 +44,47 @@ export async function GET() {
         account_number: bank.accountNumber,
         initial_balance: initial,
         account_type: bank.accountType,
+        wallet_name: bank.walletName,
         currentBalance,
       };
     });
 
     // 3. Fetch all transactions (format to match old app)
     const transactions = await prisma.transaction.findMany({
-      include: { category: true, bank: true },
-      orderBy: { date: "desc" },
+      include: { category: true, subCategory: true, bank: true },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     });
     const formattedTransactions = transactions.map((t) => ({
       id: t.id,
       type: t.type,
-      category: t.category.name,
+      category: t.category.name, // nama kategori utama (dipakai laporan & budget)
+      categoryId: t.categoryId,
+      categoryName: t.category.name,
+      subCategoryId: t.subCategoryId,
+      subCategoryName: t.subCategory?.name || null,
       amount: Number(t.amount),
       date: t.date.toISOString().split("T")[0],
       description: t.description || "",
       bank: t.bankId, // references bank.id
+      bankId: t.bankId,
+      bankName: t.bank.name,
       discount: Number(t.discount),
     }));
 
     // 4. Fetch fixed costs
     const fixedCosts = await prisma.fixedCost.findMany({
-      include: { category: true },
+      include: { category: true, subCategory: true },
       orderBy: { name: "asc" },
     });
     const formattedFixedCosts = fixedCosts.map((fc) => ({
       id: fc.id,
       name: fc.name,
       amount: Number(fc.amount),
+      categoryId: fc.categoryId,
+      subCategoryId: fc.subCategoryId,
       category_id: fc.category.name,
+      sub_category_id: fc.subCategory?.name || "",
+      category_label: fc.subCategory ? `${fc.category.name} › ${fc.subCategory.name}` : fc.category.name,
     }));
 
     // 5. Fetch deposits
@@ -111,7 +128,7 @@ export async function GET() {
 
     // 8. Fetch ecommerce transactions
     const ecommerceTxns = await prisma.ecommerceTransaction.findMany({
-      include: { platform: true, category: true, bank: true },
+      include: { platform: true, category: withParent, bank: true },
       orderBy: { date: "desc" },
     });
     const formattedEcommerce = ecommerceTxns.map((et) => ({
@@ -120,7 +137,8 @@ export async function GET() {
       platform_id: et.platformId,
       platform: et.platform.platform,
       item_name: et.itemName,
-      category: et.category.name,
+      categoryId: et.categoryId,
+      category: catLabel(et.category),
       amount: Number(et.amount),
       bank_id: et.bankId,
       bank_name: et.bank.name,
@@ -130,13 +148,14 @@ export async function GET() {
 
     // 9. Fetch inventory
     const inventory = await prisma.inventory.findMany({
-      include: { category: true },
+      include: { category: withParent },
       orderBy: { purchaseDate: "desc" },
     });
     const formattedInventory = inventory.map((i) => ({
       id: i.id,
       item_name: i.itemName,
-      category: i.category.name,
+      categoryId: i.categoryId,
+      category: catLabel(i.category),
       purchase_price: Number(i.purchasePrice),
       purchase_date: i.purchaseDate.toISOString().split("T")[0],
       lifespan_months: i.lifespanMonths,
@@ -147,7 +166,7 @@ export async function GET() {
 
     // 10. Fetch subscriptions
     const subscriptions = await prisma.subscription.findMany({
-      include: { category: true, bank: true },
+      include: { category: withParent, bank: true },
       orderBy: { dueDate: "asc" },
     });
     const formattedSubscriptions = subscriptions.map((s) => ({
@@ -157,7 +176,8 @@ export async function GET() {
       amount: Number(s.amount),
       billing_cycle: s.billingCycle,
       due_date: s.dueDate.toISOString().split("T")[0],
-      category: s.category.name,
+      categoryId: s.categoryId,
+      category: catLabel(s.category),
       bank_id: s.bankId,
       bank_name: s.bank.name,
       status: s.status,
@@ -173,6 +193,7 @@ export async function GET() {
       categoryId: b.categoryId,
       category: b.category.name,
       limit: Number(b.limit),
+      note: b.note || "",
     }));
 
     return NextResponse.json({
@@ -189,6 +210,9 @@ export async function GET() {
         inventory: formattedInventory,
         subscriptions: formattedSubscriptions,
         budgets: formattedBudgets,
+        installments: await listInstallments(),
+        pockets: await listPockets(),
+        settings: Object.fromEntries((await prisma.appSetting.findMany()).map((r) => [r.key, r.value])),
       },
     });
   } catch (error: any) {

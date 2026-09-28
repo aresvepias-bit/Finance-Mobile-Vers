@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { useAppState } from "@/hooks/useAppState";
+import { useAppState, useWalletScope } from "@/hooks/useAppState";
+import { WalletSwitcher } from "./ui/WalletSwitcher";
 import {
   TrendingUp,
   TrendingDown,
@@ -17,7 +18,8 @@ import {
 } from "lucide-react";
 
 export function ReportView() {
-  const { transactions, banks } = useAppState();
+  const { formatRp } = useAppState();
+  const { transactions, banks, walletFilter } = useWalletScope();
 
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
@@ -30,14 +32,6 @@ export function ReportView() {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
-  const formatRp = (amount: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
 
   const periodString = `${selectedYear}-${selectedMonth}`;
 
@@ -137,11 +131,15 @@ export function ReportView() {
 
   return (
     <div className="space-y-6 print:p-0">
+      <WalletSwitcher className="print:hidden" />
       {/* Header Panel */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm print:shadow-none print:border-none print:bg-transparent">
         <div>
           <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
             Laporan Keuangan per Kategori
+            {walletFilter !== "all" && (
+              <span className="text-xs font-bold px-2 py-1 rounded-lg bg-slate-900 text-white">Dompet {walletFilter}</span>
+            )}
           </h1>
           <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mt-1">
             Analisis Outlook Keuangan Periode:{" "}
@@ -204,7 +202,7 @@ export function ReportView() {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               Total Pemasukan
             </span>
-            <h3 className="text-xl font-black text-emerald-600">{formatRp(reportData.totalIncome)}</h3>
+            <h3 className="text-xl font-black text-slate-900">{formatRp(reportData.totalIncome)}</h3>
           </div>
           <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600">
             <TrendingUp className="w-5 h-5" />
@@ -230,7 +228,7 @@ export function ReportView() {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               Selisih Kas / Savings
             </span>
-            <h3 className={`text-xl font-black ${reportData.netCashFlow >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+            <h3 className={`text-xl font-black ${reportData.netCashFlow >= 0 ? "text-slate-900" : "text-rose-600"}`}>
               {reportData.netCashFlow >= 0 ? "+" : ""}
               {formatRp(reportData.netCashFlow)}
             </h3>
@@ -246,7 +244,7 @@ export function ReportView() {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               Saving Rate Bulanan
             </span>
-            <h3 className="text-xl font-black text-teal-600">{reportData.savingRate}%</h3>
+            <h3 className="text-xl font-black text-slate-900">{reportData.savingRate}%</h3>
           </div>
           <div className="p-3 bg-teal-50 rounded-xl text-teal-600">
             <Percent className="w-5 h-5" />
@@ -316,7 +314,7 @@ export function ReportView() {
                               <p className="font-bold text-slate-700">{tx.description || "Tanpa Keterangan"}</p>
                               <p className="text-[9px] text-slate-400">{tx.date}</p>
                             </div>
-                            <span className="font-extrabold text-emerald-600">+{formatRp(tx.amount)}</span>
+                            <span className="font-extrabold text-slate-900">+{formatRp(tx.amount)}</span>
                           </div>
                         ))}
                       </div>
@@ -474,7 +472,7 @@ export function ReportView() {
                       )}
                     </td>
                     <td className={`px-4 py-3 text-right font-extrabold whitespace-nowrap ${
-                      tx.type === "income" ? "text-emerald-600" : "text-rose-600"
+                      tx.type === "income" ? "text-slate-900" : "text-rose-600"
                     }`}>
                       {tx.type === "income" ? "+" : "-"}
                       {formatRp(tx.amount)}

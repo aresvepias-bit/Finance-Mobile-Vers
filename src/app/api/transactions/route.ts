@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { TRANSFER_IN, TRANSFER_OUT, isSystemCategory } from "@/lib/categories";
+import { categoryErrorResponse, getSystemCategory, resolveCategory } from "@/lib/categoryResolver";
 
 export async function GET(request: Request) {
   try {
@@ -67,7 +69,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { type, amount, date, description, bankId, categoryName, subCategoryName, discount, transferToBankId } = body;
+    const { type, amount, date, description, bankId, categoryId, discount, transferToBankId } = body;
 
     if (!type || !amount || !date || !bankId) {
       return NextResponse.json(
@@ -100,24 +102,8 @@ export async function POST(request: Request) {
         );
       }
 
-      // Retrieve or create Transfer categories
-      let catTransferOut = await prisma.category.findFirst({
-        where: { name: "Transfer Keluar", type: "expense" },
-      });
-      if (!catTransferOut) {
-        catTransferOut = await prisma.category.create({
-          data: { name: "Transfer Keluar", type: "expense" },
-        });
-      }
-
-      let catTransferIn = await prisma.category.findFirst({
-        where: { name: "Transfer Masuk", type: "income" },
-      });
-      if (!catTransferIn) {
-        catTransferIn = await prisma.category.create({
-          data: { name: "Transfer Masuk", type: "income" },
-        });
-      }
+      const catTransferOut = await getSystemCategory(TRANSFER_OUT, "expense");
+      const catTransferIn = await getSystemCategory(TRANSFER_IN, "income");
 
       const desc = description || `Transfer dari ${sourceBank.name} ke ${destBank.name}`;
 
@@ -126,7 +112,7 @@ export async function POST(request: Request) {
         const outTx = await tx.transaction.create({
           data: {
             type: "expense",
-            categoryId: catTransferOut!.id,
+            categoryId: catTransferOut.id,
             amount: amountVal,
             date: txDate,
             description: desc,
@@ -137,7 +123,7 @@ export async function POST(request: Request) {
         const inTx = await tx.transaction.create({
           data: {
             type: "income",
-            categoryId: catTransferIn!.id,
+            categoryId: catTransferIn.id,
             amount: amountVal,
             date: txDate,
             description: desc,
@@ -156,43 +142,13 @@ export async function POST(request: Request) {
     }
 
     // 2. Handle Regular Income / Expense Transaction
-    if (!categoryName) {
-      return NextResponse.json(
-        { status: "error", message: "Kategori wajib diisi!" },
-        { status: 400 }
-      );
-    }
-
-    // Resolve Category ID
-    let category = await prisma.category.findFirst({
-      where: { name: categoryName, type },
-    });
-
-    // Fallback: If not found, let's create a root category
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: categoryName, type },
-      });
-    }
-
-    let subCategoryId: string | null = null;
-    if (subCategoryName) {
-      let subCategory = await prisma.category.findFirst({
-        where: { name: subCategoryName, type, parentId: category.id },
-      });
-      if (!subCategory) {
-        subCategory = await prisma.category.create({
-          data: { name: subCategoryName, type, parentId: category.id },
-        });
-      }
-      subCategoryId = subCategory.id;
-    }
+    const { rootId, subId } = await resolveCategory(categoryId, type);
 
     const transaction = await prisma.transaction.create({
       data: {
         type,
-        categoryId: category.id,
-        subCategoryId,
+        categoryId: rootId,
+        subCategoryId: subId,
         amount: amountVal,
         date: txDate,
         description: description || "",
@@ -207,6 +163,8 @@ export async function POST(request: Request) {
       data: transaction,
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }
@@ -217,7 +175,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, type, amount, date, description, bankId, categoryName, subCategoryName, discount } = body;
+    const { id, type, amount, date, description, bankId, categoryId, discount } = body;
 
     if (!id || !type || !amount || !date || !bankId) {
       return NextResponse.json(
@@ -230,36 +188,28 @@ export async function PUT(request: Request) {
     const amountVal = parseFloat(amount);
     const discountVal = parseFloat(discount || 0);
 
-    // Resolve Category ID
-    let category = await prisma.category.findFirst({
-      where: { name: categoryName, type },
+    const existing = await prisma.transaction.findUnique({
+      where: { id },
+      include: { category: true },
     });
-
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: categoryName, type },
-      });
+    if (!existing) {
+      return NextResponse.json(
+        { status: "error", message: "Transaksi tidak ditemukan!" },
+        { status: 404 }
+      );
     }
 
-    let subCategoryId: string | null = null;
-    if (subCategoryName) {
-      let subCategory = await prisma.category.findFirst({
-        where: { name: subCategoryName, type, parentId: category.id },
-      });
-      if (!subCategory) {
-        subCategory = await prisma.category.create({
-          data: { name: subCategoryName, type, parentId: category.id },
-        });
-      }
-      subCategoryId = subCategory.id;
-    }
+    // Transaksi transfer tetap memakai kategori sistemnya
+    const { rootId, subId } = isSystemCategory(existing.category)
+      ? { rootId: existing.categoryId, subId: null }
+      : await resolveCategory(categoryId, type);
 
     const updated = await prisma.transaction.update({
       where: { id },
       data: {
         type,
-        categoryId: category.id,
-        subCategoryId,
+        categoryId: rootId,
+        subCategoryId: subId,
         amount: amountVal,
         date: txDate,
         description: description || "",
@@ -274,6 +224,8 @@ export async function PUT(request: Request) {
       data: updated,
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }

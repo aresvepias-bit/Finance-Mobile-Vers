@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { useAppState } from "@/hooks/useAppState";
+import { CategorySelect } from "./ui/CategorySelect";
 import {
   ShoppingBag,
   Plus,
@@ -20,6 +21,9 @@ export function EcommerceView() {
     ecommerce,
     addEcomTransaction,
     deleteEcomTransaction,
+    formatRp,
+    showAlert,
+    showConfirm,
   } = useAppState();
 
   // Form states
@@ -31,14 +35,6 @@ export function EcommerceView() {
   const [bankId, setBankId] = useState("");
   const [tenor, setTenor] = useState("1"); // Default: 1 month (no installment)
 
-  const formatRp = (val: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(val);
-  };
 
   const cleanNumber = (str: string) => {
     const clean = str.replace(/\D/g, "");
@@ -50,49 +46,27 @@ export function EcommerceView() {
     setter(num ? new Intl.NumberFormat("id-ID").format(num) : "");
   };
 
-  // Build category hierarchy options for dropdown
-  const categoryOptions = useMemo(() => {
-    const parents = categories.filter((c) => c.type === "expense" && !c.parentId);
-    const list: { id: string; name: string; isParent: boolean; parentName?: string }[] = [];
-
-    parents.forEach((p) => {
-      const children = categories.filter((c) => c.parentId === p.id);
-      if (children.length > 0) {
-        list.push({ id: p.id, name: p.name, isParent: true });
-        children.forEach((ch) => {
-          list.push({ id: ch.id, name: ch.name, isParent: false, parentName: p.name });
-        });
-      } else {
-        list.push({ id: p.id, name: p.name, isParent: false });
-      }
-    });
-    return list;
-  }, [categories]);
-
   // Submit shopping log
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!purchaseDate || !platformId || !itemName || !categorySelect || !amount || !bankId) {
-      alert("Isi data belanja dengan lengkap!");
+      showAlert("Isi data belanja dengan lengkap!", "error");
       return;
     }
 
     const cleanAmt = cleanNumber(amount);
     if (cleanAmt <= 0) {
-      alert("Nominal belanja harus valid!");
+      showAlert("Nominal belanja harus valid!", "error");
       return;
     }
 
-    // Resolve Category Name (use parent if subcategory)
-    const parts = categorySelect.split(" - ");
-    const categoryName = parts.length > 1 ? parts[0] : categorySelect;
 
     const payload = {
       date: purchaseDate,
       platformId,
       itemName,
-      categoryName,
+      categoryId: categorySelect,
       amount: cleanAmt,
       bankId,
       tenor: parseInt(tenor, 10),
@@ -103,20 +77,24 @@ export function EcommerceView() {
       setItemName("");
       setAmount("");
       setTenor("1");
-      alert("Transaksi e-commerce dan pengeluaran kas berhasil disimpan!");
+      showAlert("Transaksi e-commerce dan pengeluaran kas berhasil disimpan!", "success");
     } else {
-      alert(res.message || "Gagal menyimpan data.");
+      showAlert(res.message || "Gagal menyimpan data.", "error");
     }
   };
 
   // Delete transaction
   const handleDeleteClick = async (id: string) => {
-    if (confirm("Hapus catatan belanja ini? Pengeluaran kas terkait juga akan ikut dihapus!")) {
-      const res = await deleteEcomTransaction(id);
-      if (res.status !== "success") {
-        alert(res.message || "Gagal menghapus data.");
-      }
-    }
+    showConfirm(
+      "Hapus catatan belanja ini? Pengeluaran kas terkait juga akan ikut dihapus!",
+      async () => {
+        const res = await deleteEcomTransaction(id);
+        if (res.status !== "success") {
+          showAlert(res.message || "Gagal menghapus data.", "error");
+        }
+      },
+      { title: "Konfirmasi Hapus", type: "danger" }
+    );
   };
 
   // Total summary calculation
@@ -173,24 +151,12 @@ export function EcommerceView() {
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                 Kategori Pengeluaran
               </label>
-              <select
-                required
+              <CategorySelect
+                categories={categories}
+                type="expense"
                 value={categorySelect}
-                onChange={(e) => setCategorySelect(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 p-3 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-              >
-                <option value="">-- Pilih Kategori --</option>
-                {categoryOptions.map((opt, i) => (
-                  <option
-                    key={i}
-                    value={opt.isParent ? opt.name : `${opt.parentName} - ${opt.name}`}
-                    disabled={opt.isParent}
-                    className={opt.isParent ? "font-bold bg-slate-100 text-slate-800" : ""}
-                  >
-                    {opt.isParent ? `● ${opt.name.toUpperCase()}` : `   └─ ${opt.name}`}
-                  </option>
-                ))}
-              </select>
+                onChange={setCategorySelect}
+              />
             </div>
 
             {/* Amount */}

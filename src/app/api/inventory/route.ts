@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { categoryErrorResponse, resolveCategory } from "@/lib/categoryResolver";
 
 export async function GET() {
   try {
@@ -26,6 +27,8 @@ export async function GET() {
 
     return NextResponse.json({ status: "success", data: formatted });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }
@@ -36,29 +39,21 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { itemName, categoryName, purchasePrice, purchaseDate, lifespanMonths, condition, source, ecomId } = body;
+    const { itemName, categoryId, purchasePrice, purchaseDate, lifespanMonths, condition, source, ecomId } = body;
 
-    if (!itemName || !categoryName || !purchasePrice || !purchaseDate) {
+    if (!itemName || !purchasePrice || !purchaseDate) {
       return NextResponse.json(
         { status: "error", message: "Data barang inventaris tidak lengkap!" },
         { status: 400 }
       );
     }
 
-    // Resolve Category
-    let category = await prisma.category.findFirst({
-      where: { name: categoryName, type: "inventory" },
-    });
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: categoryName, type: "inventory" },
-      });
-    }
+    const { leafId } = await resolveCategory(categoryId, "inventory");
 
     const item = await prisma.inventory.create({
       data: {
         itemName,
-        categoryId: category.id,
+        categoryId: leafId,
         purchasePrice: parseFloat(purchasePrice),
         purchaseDate: new Date(purchaseDate),
         lifespanMonths: parseInt(lifespanMonths || 24),
@@ -74,6 +69,8 @@ export async function POST(request: Request) {
       data: item,
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }
@@ -84,30 +81,22 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, itemName, categoryName, purchasePrice, purchaseDate, lifespanMonths, condition } = body;
+    const { id, itemName, categoryId, purchasePrice, purchaseDate, lifespanMonths, condition } = body;
 
-    if (!id || !itemName || !categoryName || !purchasePrice || !purchaseDate) {
+    if (!id || !itemName || !purchasePrice || !purchaseDate) {
       return NextResponse.json(
         { status: "error", message: "Data lengkap wajib disertakan!" },
         { status: 400 }
       );
     }
 
-    // Resolve Category
-    let category = await prisma.category.findFirst({
-      where: { name: categoryName, type: "inventory" },
-    });
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: categoryName, type: "inventory" },
-      });
-    }
+    const { leafId } = await resolveCategory(categoryId, "inventory");
 
     const item = await prisma.inventory.update({
       where: { id },
       data: {
         itemName,
-        categoryId: category.id,
+        categoryId: leafId,
         purchasePrice: parseFloat(purchasePrice),
         purchaseDate: new Date(purchaseDate),
         lifespanMonths: parseInt(lifespanMonths || 24),
@@ -121,6 +110,8 @@ export async function PUT(request: Request) {
       data: item,
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }
@@ -149,6 +140,8 @@ export async function DELETE(request: Request) {
       message: "Barang berhasil dihapus dari inventaris",
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }

@@ -62,17 +62,35 @@ export const apiService = {
     return handleResponse(res);
   },
 
+  async updateCategory(id: string, name: string): Promise<ApiResult> {
+    const res = await fetch("/api/categories", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, name }),
+    });
+    return handleResponse(res);
+  },
+
   async deleteCategory(id: string): Promise<ApiResult> {
     const res = await fetch(`/api/categories?id=${id}`, { method: "DELETE" });
     return handleResponse(res);
   },
 
   // Banks
-  async addBank(name: string, accountNumber: string, initialBalance: number, accountType: string): Promise<ApiResult> {
+  async addBank(name: string, accountNumber: string, initialBalance: number, accountType: string, walletName?: string): Promise<ApiResult> {
     const res = await fetch("/api/banks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, accountNumber, initialBalance, accountType }),
+      body: JSON.stringify({ name, accountNumber, initialBalance, accountType, walletName }),
+    });
+    return handleResponse(res);
+  },
+
+  async updateBank(data: { id: string; name?: string; accountNumber?: string; walletName?: string }): Promise<ApiResult> {
+    const res = await fetch("/api/banks", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     });
     return handleResponse(res);
   },
@@ -89,8 +107,7 @@ export const apiService = {
     date: string;
     description: string;
     bankId: string;
-    categoryName?: string;
-    subCategoryName?: string;
+    categoryId?: string;
     discount?: number;
     transferToBankId?: string;
   }): Promise<ApiResult> {
@@ -109,8 +126,7 @@ export const apiService = {
     date: string;
     description: string;
     bankId: string;
-    categoryName: string;
-    subCategoryName?: string;
+    categoryId: string;
     discount?: number;
   }): Promise<ApiResult> {
     const res = await fetch("/api/transactions", {
@@ -127,11 +143,11 @@ export const apiService = {
   },
 
   // Budgets
-  async saveBudget(month: string, categoryName: string, limit: number): Promise<ApiResult> {
+  async saveBudget(month: string, categoryId: string, limit: number, note?: string): Promise<ApiResult> {
     const res = await fetch("/api/budgets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month, categoryName, limit }),
+      body: JSON.stringify({ month, categoryId, limit, note }),
     });
     return handleResponse(res);
   },
@@ -151,11 +167,11 @@ export const apiService = {
   },
 
   // Fixed Costs
-  async addFixedCost(name: string, amount: number, categoryName: string): Promise<ApiResult> {
+  async addFixedCost(name: string, amount: number, categoryId: string): Promise<ApiResult> {
     const res = await fetch("/api/fixed-costs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, amount, categoryName }),
+      body: JSON.stringify({ name, amount, categoryId }),
     });
     return handleResponse(res);
   },
@@ -241,7 +257,7 @@ export const apiService = {
     date: string;
     platformId: string;
     itemName: string;
-    categoryName: string;
+    categoryId: string;
     amount: number;
     bankId: string;
     tenor: number;
@@ -262,7 +278,7 @@ export const apiService = {
   // Inventory
   async addInventoryItem(data: {
     itemName: string;
-    categoryName: string;
+    categoryId: string;
     purchasePrice: number;
     purchaseDate: string;
     lifespanMonths: number;
@@ -281,7 +297,7 @@ export const apiService = {
   async updateInventoryItem(data: {
     id: string;
     itemName: string;
-    categoryName: string;
+    categoryId: string;
     purchasePrice: number;
     purchaseDate: string;
     lifespanMonths: number;
@@ -300,6 +316,83 @@ export const apiService = {
     return handleResponse(res);
   },
 
+  // Settings
+  async saveSetting(key: string, value: unknown): Promise<ApiResult> {
+    const res = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, value }),
+    });
+    return handleResponse(res);
+  },
+
+  // Pockets (pos alokasi)
+  async savePocket(data: Record<string, unknown>): Promise<ApiResult> {
+    const res = await fetch("/api/pockets", {
+      method: data.id ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  async deletePocket(id: string): Promise<ApiResult> {
+    const res = await fetch(`/api/pockets?id=${id}`, { method: "DELETE" });
+    return handleResponse(res);
+  },
+
+  async addPocketEntry(data: { pocketId: string; type: "deposit" | "withdraw"; amount: number; date?: string; note?: string }): Promise<ApiResult> {
+    const res = await fetch("/api/pockets/entries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  async deletePocketEntry(id: string): Promise<ApiResult> {
+    const res = await fetch(`/api/pockets/entries?id=${id}`, { method: "DELETE" });
+    return handleResponse(res);
+  },
+
+  async allocatePockets(data: { month: string; date?: string; allocations: { pocketId: string; amount: number }[] }): Promise<ApiResult> {
+    const res = await fetch("/api/pockets/allocate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  // Installments (cicilan)
+  async saveInstallment(data: Record<string, unknown>): Promise<ApiResult> {
+    const res = await fetch("/api/installments", {
+      method: data.id ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  async deleteInstallment(id: string): Promise<ApiResult> {
+    const res = await fetch(`/api/installments?id=${id}`, { method: "DELETE" });
+    return handleResponse(res);
+  },
+
+  async payInstallment(data: { id: string; date?: string; bankId?: string; amount?: number }): Promise<ApiResult> {
+    const res = await fetch("/api/installments/pay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  async undoInstallmentPayment(paymentId: string): Promise<ApiResult> {
+    const res = await fetch(`/api/installments/pay?paymentId=${paymentId}`, { method: "DELETE" });
+    return handleResponse(res);
+  },
+
   // Subscriptions
   async addSubscription(data: {
     name: string;
@@ -307,7 +400,7 @@ export const apiService = {
     amount: number;
     billingCycle: string;
     dueDate: string;
-    categoryName: string;
+    categoryId: string;
     bankId: string;
   }): Promise<ApiResult> {
     const res = await fetch("/api/subscriptions", {
@@ -325,7 +418,7 @@ export const apiService = {
     amount: number;
     billingCycle: string;
     dueDate: string;
-    categoryName: string;
+    categoryId: string;
     bankId: string;
     status: string;
   }): Promise<ApiResult> {

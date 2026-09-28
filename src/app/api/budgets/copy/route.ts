@@ -36,11 +36,13 @@ export async function POST(request: Request) {
         },
         update: {
           limit: limitVal,
+          note: b.note,
         },
         create: {
           month: targetMonth,
           categoryId: b.categoryId,
           limit: limitVal,
+          note: b.note,
         },
       });
     });
@@ -60,6 +62,7 @@ export async function POST(request: Request) {
       categoryId: b.categoryId,
       category: b.category.name,
       limit: Number(b.limit),
+      note: b.note || "",
     }));
 
     return NextResponse.json({

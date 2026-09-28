@@ -27,6 +27,7 @@ export function TransactionForm() {
     deleteTransaction,
     showConfirm,
     showAlert,
+    formatRp,
   } = useAppState();
 
   const [activeSubTab, setActiveSubTab] = useState<"expense" | "income" | "transfer">("expense");
@@ -61,15 +62,6 @@ export function TransactionForm() {
   const [editCategorySelect, setEditCategorySelect] = useState("");
   const [editDiscount, setEditDiscount] = useState("");
 
-  // Format rupiah helper
-  const formatRp = (val: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(val);
-  };
 
   // Helper parsing numeric input
   const cleanNumber = (str: string) => {
@@ -82,48 +74,11 @@ export function TransactionForm() {
     setter(num ? new Intl.NumberFormat("id-ID").format(num) : "");
   };
 
-  // Build category hierarchy select options
-  const categoryOptions = useMemo(() => {
-    const type = activeSubTab === "transfer" ? "expense" : activeSubTab;
-    const parents = categories.filter((c) => c.type === type && !c.parentId);
-
-    const list: { id: string; name: string; isParent: boolean; parentName?: string }[] = [];
-
-    parents.forEach((p) => {
-      const children = categories.filter((c) => c.parentId === p.id);
-      if (children.length > 0) {
-        list.push({ id: p.id, name: p.name, isParent: true });
-        children.forEach((ch) => {
-          list.push({ id: ch.id, name: ch.name, isParent: false, parentName: p.name });
-        });
-      } else {
-        list.push({ id: p.id, name: p.name, isParent: false });
-      }
-    });
-
-    return list;
-  }, [categories, activeSubTab]);
-
-  // Selections for Edit modal categories
-  const editCategoryOptions = useMemo(() => {
-    if (!editTx) return [];
-    const type = editTx.type;
-    const parents = categories.filter((c) => c.type === type && !c.parentId);
-    const list: { id: string; name: string; isParent: boolean; parentName?: string }[] = [];
-
-    parents.forEach((p) => {
-      const children = categories.filter((c) => c.parentId === p.id);
-      if (children.length > 0) {
-        list.push({ id: p.id, name: p.name, isParent: true });
-        children.forEach((ch) => {
-          list.push({ id: ch.id, name: ch.name, isParent: false, parentName: p.name });
-        });
-      } else {
-        list.push({ id: p.id, name: p.name, isParent: false });
-      }
-    });
-    return list;
-  }, [categories, editTx]);
+  // Ganti tab: kategori pengeluaran & pemasukan berbeda, jadi pilihan di-reset
+  const switchSubTab = (tab: "expense" | "income" | "transfer") => {
+    setActiveSubTab(tab);
+    setCategorySelect("");
+  };
 
   // Filter & group transactions by date for selected month
   const filteredTransactionsGrouped = useMemo(() => {
@@ -190,15 +145,7 @@ export function TransactionForm() {
         showAlert("Pilih kategori!", "error");
         return;
       }
-      // Parse category Name and subCategory Name
-      // Select value contains: "parentName - childName" or just "categoryName"
-      const parts = categorySelect.split(" - ");
-      if (parts.length > 1) {
-        payload.categoryName = parts[0];
-        payload.subCategoryName = parts[1];
-      } else {
-        payload.categoryName = categorySelect;
-      }
+      payload.categoryId = categorySelect;
       payload.discount = cleanNumber(discount);
     }
 
@@ -254,7 +201,7 @@ export function TransactionForm() {
         date: quickDate,
         description: item.fc.name + suffix,
         bankId: quickBankId,
-        categoryName: item.fc.category_id, // contains parent name
+        categoryId: item.fc.subCategoryId || item.fc.categoryId,
       });
     }
 
@@ -272,10 +219,7 @@ export function TransactionForm() {
     setEditBankId(tx.bankId);
     setEditDiscount(tx.discount ? new Intl.NumberFormat("id-ID").format(tx.discount) : "");
 
-    const fullCatVal = tx.subCategoryName
-      ? `${tx.categoryName} - ${tx.subCategoryName}`
-      : tx.categoryName;
-    setEditCategorySelect(fullCatVal);
+    setEditCategorySelect(tx.subCategoryId || tx.categoryId || "");
 
     setIsEditOpen(true);
   };
@@ -299,13 +243,7 @@ export function TransactionForm() {
       bankId: editBankId,
     };
 
-    const parts = editCategorySelect.split(" - ");
-    if (parts.length > 1) {
-      payload.categoryName = parts[0];
-      payload.subCategoryName = parts[1];
-    } else {
-      payload.categoryName = editCategorySelect;
-    }
+    payload.categoryId = editCategorySelect;
     payload.discount = cleanNumber(editDiscount);
 
     const res = await updateTransaction(payload);
@@ -342,7 +280,7 @@ export function TransactionForm() {
         <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
           <div className="flex bg-slate-100 p-1 rounded-xl mb-5">
             <button
-              onClick={() => setActiveSubTab("expense")}
+              onClick={() => switchSubTab("expense")}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
                 activeSubTab === "expense"
                   ? "bg-white text-rose-600 shadow-sm"
@@ -352,7 +290,7 @@ export function TransactionForm() {
               Pengeluaran
             </button>
             <button
-              onClick={() => setActiveSubTab("income")}
+              onClick={() => switchSubTab("income")}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
                 activeSubTab === "income"
                   ? "bg-white text-emerald-600 shadow-sm"
@@ -362,7 +300,7 @@ export function TransactionForm() {
               Pemasukan
             </button>
             <button
-              onClick={() => setActiveSubTab("transfer")}
+              onClick={() => switchSubTab("transfer")}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
                 activeSubTab === "transfer"
                   ? "bg-white text-emerald-600 shadow-sm"
@@ -427,9 +365,10 @@ export function TransactionForm() {
                   Kategori
                 </label>
                 <CategorySelect
+                  categories={categories}
+                  type={activeSubTab}
                   value={categorySelect}
                   onChange={setCategorySelect}
-                  options={categoryOptions}
                 />
               </div>
             )}
@@ -658,7 +597,7 @@ export function TransactionForm() {
                         const amtColor = isTransfer
                           ? "text-slate-600"
                           : isInc
-                          ? "text-emerald-600"
+                          ? "text-slate-900"
                           : "text-rose-600";
                         const sign = isTransfer ? "" : isInc ? "+" : "-";
 
@@ -799,9 +738,10 @@ export function TransactionForm() {
                     Kategori
                   </label>
                   <CategorySelect
+                    categories={categories}
+                    type={editTx.type}
                     value={editCategorySelect}
                     onChange={setEditCategorySelect}
-                    options={editCategoryOptions}
                   />
                 </div>
               )}

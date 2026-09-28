@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { categoryErrorResponse, resolveCategory } from "@/lib/categoryResolver";
 
 export async function GET() {
   try {
@@ -30,6 +31,8 @@ export async function GET() {
 
     return NextResponse.json({ status: "success", data: formatted });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }
@@ -40,9 +43,9 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { date, platformId, itemName, categoryName, amount, bankId, tenor } = body;
+    const { date, platformId, itemName, categoryId, amount, bankId, tenor } = body;
 
-    if (!date || !platformId || !itemName || !categoryName || !amount || !bankId) {
+    if (!date || !platformId || !itemName || !amount || !bankId) {
       return NextResponse.json(
         { status: "error", message: "Data belanja e-commerce tidak lengkap!" },
         { status: 400 }
@@ -64,15 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Resolve Category
-    let category = await prisma.category.findFirst({
-      where: { name: categoryName, type: "expense" },
-    });
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: categoryName, type: "expense" },
-      });
-    }
+    const { leafId, rootId, subId } = await resolveCategory(categoryId, "expense");
 
     // Resolve Bank
     const bank = await prisma.bank.findUnique({
@@ -92,7 +87,8 @@ export async function POST(request: Request) {
       const generalTx = await tx.transaction.create({
         data: {
           type: "expense",
-          categoryId: category!.id,
+          categoryId: rootId,
+          subCategoryId: subId,
           amount: amountVal,
           date: txDate,
           description: description,
@@ -106,7 +102,7 @@ export async function POST(request: Request) {
           date: txDate,
           platformId,
           itemName,
-          categoryId: category!.id,
+          categoryId: leafId,
           amount: amountVal,
           bankId,
           tenor: tenorVal,
@@ -123,6 +119,8 @@ export async function POST(request: Request) {
       data: result,
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }
@@ -173,6 +171,8 @@ export async function DELETE(request: Request) {
       message: "Transaksi E-Commerce dan pengeluaran terkait berhasil dihapus",
     });
   } catch (error: any) {
+    const catErr = categoryErrorResponse(error);
+    if (catErr) return catErr;
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },
       { status: 500 }

@@ -56,7 +56,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { name, accountNumber, initialBalance, accountType } = await request.json();
+    const { name, accountNumber, initialBalance, accountType, walletName } = await request.json();
 
     if (!name || !accountType) {
       return NextResponse.json(
@@ -71,6 +71,7 @@ export async function POST(request: Request) {
         accountNumber: accountNumber || "-",
         initialBalance: initialBalance || 0,
         accountType,
+        walletName: String(walletName || "").trim() || "Pribadi",
       },
     });
 
@@ -79,6 +80,35 @@ export async function POST(request: Request) {
       message: "Akun bank berhasil ditambahkan",
       data: bank,
     });
+  } catch (error: any) {
+    return NextResponse.json(
+      { status: "error", message: error.message || "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+/** Ubah nama, nomor, atau dompet rekening (saldo awal tidak diubah demi konsistensi saldo). */
+export async function PUT(request: Request) {
+  try {
+    const { id, name, accountNumber, walletName } = await request.json();
+    const existing = id ? await prisma.bank.findUnique({ where: { id } }) : null;
+    if (!existing) {
+      return NextResponse.json({ status: "error", message: "Rekening tidak ditemukan!" }, { status: 404 });
+    }
+    const cleanName = String(name ?? existing.name).trim();
+    if (!cleanName) {
+      return NextResponse.json({ status: "error", message: "Nama rekening wajib diisi!" }, { status: 400 });
+    }
+    const bank = await prisma.bank.update({
+      where: { id },
+      data: {
+        name: cleanName,
+        accountNumber: String(accountNumber ?? existing.accountNumber).trim() || "-",
+        walletName: String(walletName ?? existing.walletName).trim() || "Pribadi",
+      },
+    });
+    return NextResponse.json({ status: "success", message: "Rekening berhasil diperbarui", data: bank });
   } catch (error: any) {
     return NextResponse.json(
       { status: "error", message: error.message || "Internal server error" },

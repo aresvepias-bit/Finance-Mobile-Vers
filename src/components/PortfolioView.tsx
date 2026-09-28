@@ -74,6 +74,7 @@ export function PortfolioView() {
     deleteCrypto,
     showAlert,
     showConfirm,
+    formatRp,
   } = useAppState();
 
   const [activeTab, setActiveTab] = useState<"deposits" | "cryptos">("deposits");
@@ -102,14 +103,6 @@ export function PortfolioView() {
   const [editCryptoQty, setEditCryptoQty] = useState("");
   const [editCryptoVal, setEditCryptoVal] = useState("");
 
-  const formatRp = (val: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(val);
-  };
 
   const cleanNumber = (str: string) => {
     const clean = str.replace(/\D/g, "");
@@ -309,16 +302,16 @@ export function PortfolioView() {
     if (n === "USDT" || n === "USDC") return "bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-emerald-400/20";
     if (n === "SOL") return "bg-gradient-to-r from-purple-500 to-pink-500 shadow-purple-500/20";
     if (n === "BNB") return "bg-gradient-to-r from-yellow-400 to-yellow-500 shadow-yellow-400/20";
-    return "bg-gradient-to-r from-cyan-400 to-blue-500 shadow-cyan-400/20";
+    return "bg-gradient-to-r from-cyan-400 to-emerald-500 shadow-cyan-400/20";
   };
 
   const getCryptoCardStyle = (name: string) => {
     const n = name.toUpperCase();
-    if (n === "BTC") return "border-l-4 border-l-amber-500 hover:border-amber-200/80";
-    if (n === "ETH") return "border-l-4 border-l-indigo-500 hover:border-indigo-200/80";
-    if (n === "USDT" || n === "USDC") return "border-l-4 border-l-emerald-500 hover:border-emerald-200/80";
-    if (n === "SOL") return "border-l-4 border-l-purple-500 hover:border-purple-200/80";
-    return "border-l-4 border-l-cyan-500 hover:border-cyan-200/80";
+    if (n === "BTC") return "border-l-2 border-l-amber-400 hover:border-amber-200/80";
+    if (n === "ETH") return "border-l-2 border-l-indigo-400 hover:border-indigo-200/80";
+    if (n === "USDT" || n === "USDC") return "border-l-2 border-l-emerald-400 hover:border-emerald-200/80";
+    if (n === "SOL") return "border-l-2 border-l-purple-400 hover:border-purple-200/80";
+    return "border-l-2 border-l-cyan-400 hover:border-cyan-200/80";
   };
 
   const getCoinWatermarkSymbol = (name: string) => {
@@ -548,7 +541,7 @@ export function PortfolioView() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Active Depo */}
             <div
-              className={`bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-100/80 shadow-sm flex items-center gap-4 hover:border-slate-200 hover:shadow-md transition-all duration-700 ease-out transform ${
+              className={`bg-white backdrop-blur-md rounded-3xl p-5 border border-slate-100/80 shadow-sm flex items-center gap-4 hover:border-slate-200 hover:shadow-md transition-all duration-700 ease-out transform ${
                 animateCards ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
               }`}
             >
@@ -566,7 +559,7 @@ export function PortfolioView() {
             </div>
             {/* Est Monthly passive income */}
             <div
-              className={`bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-100/80 shadow-sm flex items-center gap-4 hover:border-slate-200 hover:shadow-md transition-all duration-700 ease-out transform ${
+              className={`bg-white backdrop-blur-md rounded-3xl p-5 border border-slate-100/80 shadow-sm flex items-center gap-4 hover:border-slate-200 hover:shadow-md transition-all duration-700 ease-out transform ${
                 animateCards ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
               }`}
               style={{ transitionDelay: "40ms" }}
@@ -578,7 +571,7 @@ export function PortfolioView() {
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   Estimasi Bunga Bulanan
                 </p>
-                <h3 className="text-lg font-black text-emerald-600 mt-0.5">
+                <h3 className="text-lg font-black text-slate-900 mt-0.5">
                   <AnimatedNumber value={depoStats.estMonthlyInterest} formatter={formatRp} />
                 </h3>
               </div>
@@ -588,7 +581,7 @@ export function PortfolioView() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Total crypto investment */}
             <div
-              className={`bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-100/80 shadow-sm flex items-center gap-4 hover:border-slate-200 hover:shadow-md transition-all duration-700 ease-out transform ${
+              className={`bg-white backdrop-blur-md rounded-3xl p-5 border border-slate-100/80 shadow-sm flex items-center gap-4 hover:border-slate-200 hover:shadow-md transition-all duration-700 ease-out transform ${
                 animateCards ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
               }`}
             >
@@ -606,7 +599,7 @@ export function PortfolioView() {
             </div>
             {/* Diversity count */}
             <div
-              className={`bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-100/80 shadow-sm flex items-center gap-4 hover:border-slate-200 hover:shadow-md transition-all duration-700 ease-out transform ${
+              className={`bg-white backdrop-blur-md rounded-3xl p-5 border border-slate-100/80 shadow-sm flex items-center gap-4 hover:border-slate-200 hover:shadow-md transition-all duration-700 ease-out transform ${
                 animateCards ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
               }`}
               style={{ transitionDelay: "40ms" }}
@@ -703,7 +696,7 @@ export function PortfolioView() {
                       </div>
                       <div>
                         <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Bunga Bulanan</p>
-                        <p className="text-xs font-extrabold text-emerald-600 mt-0.5">
+                        <p className="text-xs font-extrabold text-slate-900 mt-0.5">
                           <AnimatedNumber value={monthlyInterest} formatter={formatRp} />
                         </p>
                       </div>
@@ -805,7 +798,7 @@ export function PortfolioView() {
                   {/* Pricing and allocation indicator */}
                   <div className="mt-2 z-10">
                     <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Nilai Portofolio</p>
-                    <p className="text-xl font-black text-emerald-600 mt-0.5">
+                    <p className="text-xl font-black text-slate-900 mt-0.5">
                       <AnimatedNumber value={Number(c.value_idr)} formatter={formatRp} />
                     </p>
 

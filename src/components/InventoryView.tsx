@@ -2,9 +2,10 @@
 
 import React, { useState, useMemo } from "react";
 import { useAppState } from "@/hooks/useAppState";
+import { CategorySelect } from "./ui/CategorySelect";
+import { computeDepreciation } from "@/lib/depreciation";
 import { Modal } from "./ui/Modal";
 import {
-  Package,
   Plus,
   Trash2,
   Edit2,
@@ -23,15 +24,18 @@ export function InventoryView() {
     addInventoryItem,
     updateInventoryItem,
     deleteInventoryItem,
+    formatRp,
+    showAlert,
+    showConfirm,
   } = useAppState();
 
   // Filter states
-  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterCategory, setFilterCategory] = useState(""); // "" = semua kategori
   const [filterCondition, setFilterCondition] = useState("all");
 
   // Form states
   const [itemName, setItemName] = useState("");
-  const [categoryName, setCategoryName] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [purchasePrice, setPurchasePrice] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [lifespanMonths, setLifespanMonths] = useState("24");
@@ -41,20 +45,12 @@ export function InventoryView() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [editItemName, setEditItemName] = useState("");
-  const [editCategoryName, setEditCategoryName] = useState("");
+  const [editCategoryId, setEditCategoryId] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editLifespan, setEditLifespan] = useState("");
   const [editCondition, setEditCondition] = useState("Baik");
 
-  const formatRp = (val: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(val);
-  };
 
   const cleanNumber = (str: string) => {
     const clean = str.replace(/\D/g, "");
@@ -66,29 +62,24 @@ export function InventoryView() {
     setter(num ? new Intl.NumberFormat("id-ID").format(num) : "");
   };
 
-  // Build category hierarchy options (only inventory type)
-  const categoryOptions = useMemo(() => {
-    return categories.filter((c) => c.type === "inventory");
-  }, [categories]);
-
   // Submit asset
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!itemName || !categoryName || !purchasePrice || !purchaseDate || !lifespanMonths) {
-      alert("Isi data aset dengan lengkap!");
+    if (!itemName || !categoryId || !purchasePrice || !purchaseDate || !lifespanMonths) {
+      showAlert("Isi data aset dengan lengkap!", "error");
       return;
     }
 
     const cleanPrice = cleanNumber(purchasePrice);
     if (cleanPrice <= 0) {
-      alert("Harga beli harus valid!");
+      showAlert("Harga beli harus valid!", "error");
       return;
     }
 
     const payload = {
       itemName,
-      categoryName,
+      categoryId,
       purchasePrice: cleanPrice,
       purchaseDate,
       lifespanMonths: parseInt(lifespanMonths, 10),
@@ -102,16 +93,16 @@ export function InventoryView() {
       setPurchasePrice("");
       setLifespanMonths("24");
       setCondition("Baik");
-      alert("Aset berhasil dicatat di inventaris!");
+      showAlert("Aset berhasil dicatat di inventaris!", "success");
     } else {
-      alert(res.message || "Gagal menyimpan data.");
+      showAlert(res.message || "Gagal menyimpan data.", "error");
     }
   };
 
   // Filter items
   const filteredInventory = useMemo(() => {
     return inventory.filter((item) => {
-      const matchCat = filterCategory === "all" || item.category === filterCategory;
+      const matchCat = !filterCategory || item.categoryId === filterCategory;
       const matchCond = filterCondition === "all" || item.condition === filterCondition;
       return matchCat && matchCond;
     });
@@ -121,7 +112,7 @@ export function InventoryView() {
   const handleEditClick = (item: any) => {
     setEditItem(item);
     setEditItemName(item.item_name);
-    setEditCategoryName(item.category);
+    setEditCategoryId(item.categoryId);
     setEditPrice(new Intl.NumberFormat("id-ID").format(item.purchase_price));
     setEditDate(item.purchase_date);
     setEditLifespan(item.lifespan_months.toString());
@@ -133,15 +124,15 @@ export function InventoryView() {
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!editItemName || !editCategoryName || !editPrice || !editDate || !editLifespan) {
-      alert("Isi data dengan lengkap!");
+    if (!editItemName || !editCategoryId || !editPrice || !editDate || !editLifespan) {
+      showAlert("Isi data dengan lengkap!", "error");
       return;
     }
 
     const payload = {
       id: editItem.id,
       itemName: editItemName,
-      categoryName: editCategoryName,
+      categoryId: editCategoryId,
       purchasePrice: cleanNumber(editPrice),
       purchaseDate: editDate,
       lifespanMonths: parseInt(editLifespan, 10),
@@ -153,42 +144,45 @@ export function InventoryView() {
       setIsEditOpen(false);
       setEditItem(null);
     } else {
-      alert(res.message || "Gagal memperbarui data.");
+      showAlert(res.message || "Gagal memperbarui data.", "error");
     }
   };
 
   // Delete item
   const handleDeleteClick = async (id: string) => {
-    if (confirm("Hapus barang ini dari inventaris?")) {
-      const res = await deleteInventoryItem(id);
-      if (res.status !== "success") {
-        alert(res.message || "Gagal menghapus data.");
-      }
+    showConfirm(
+      "Hapus barang ini dari inventaris?",
+      async () => {
+        const res = await deleteInventoryItem(id);
+        if (res.status !== "success") {
+          showAlert(res.message || "Gagal menghapus data.", "error");
+        }
+      },
+      { title: "Konfirmasi Hapus", type: "danger" }
+    );
+  };
+
+  // Penyusutan tiap aset (garis lurus) + ringkasan sesuai filter
+  const itemsWithDep = useMemo(
+    () =>
+      filteredInventory.map((item) => ({
+        item,
+        dep: computeDepreciation(Number(item.purchase_price) || 0, item.purchase_date, Number(item.lifespan_months) || 0),
+      })),
+    [filteredInventory]
+  );
+
+  const depSummary = useMemo(() => {
+    let cost = 0;
+    let book = 0;
+    let monthly = 0;
+    for (const { item, dep } of itemsWithDep) {
+      cost += Number(item.purchase_price) || 0;
+      book += dep.bookValue;
+      if (!dep.isFullyDepreciated) monthly += dep.monthly;
     }
-  };
-
-  // Calculate remaining lifespan months and percentage
-  const calculateLifespan = (purchaseDateStr: string, lifespanMonthsVal: number) => {
-    const start = new Date(purchaseDateStr);
-    const today = new Date();
-
-    const diffMs = today.getTime() - start.getTime();
-    const diffMonths = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24 * 30.4)));
-
-    const remaining = Math.max(0, lifespanMonthsVal - diffMonths);
-    const pct = lifespanMonthsVal > 0 ? Math.round((remaining / lifespanMonthsVal) * 100) : 0;
-
-    return {
-      elapsed: diffMonths,
-      remaining,
-      pct,
-    };
-  };
-
-  // Total assets value calculation
-  const totalAssetsValue = useMemo(() => {
-    return inventory.reduce((sum, item) => sum + Number(item.purchase_price), 0);
-  }, [inventory]);
+    return { cost, book, accumulated: cost - book, monthly, bookPct: cost > 0 ? (book / cost) * 100 : 0 };
+  }, [itemsWithDep]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -203,18 +197,14 @@ export function InventoryView() {
             <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">
               Kategori
             </label>
-            <select
+            <CategorySelect
+              categories={categories}
+              type="inventory"
               value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 p-2 text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-            >
-              <option value="all">Semua Kategori</option>
-              {categoryOptions.map((c) => (
-                <option key={c.id} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={setFilterCategory}
+              emptyOptionLabel="Semua Kategori"
+              size="sm"
+            />
           </div>
 
           <div>
@@ -260,19 +250,12 @@ export function InventoryView() {
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                 Kategori Aset
               </label>
-              <select
-                required
-                value={categoryName}
-                onChange={(e) => setCategoryName(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 p-3 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-              >
-                <option value="">Pilih Kategori...</option>
-                {categoryOptions.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <CategorySelect
+                categories={categories}
+                type="inventory"
+                value={categoryId}
+                onChange={setCategoryId}
+              />
             </div>
 
             {/* Price */}
@@ -339,7 +322,7 @@ export function InventoryView() {
 
             <button
               type="submit"
-              className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-sm shadow-md shadow-teal-200/50 transition-transform hover:scale-[1.01]"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-md shadow-emerald-100"
             >
               Simpan Aset
             </button>
@@ -349,34 +332,54 @@ export function InventoryView() {
 
       {/* Main Grid display column */}
       <div className="lg:col-span-2 space-y-6">
-        {/* Total Assets Value */}
-        <div className="bg-teal-50 border border-teal-100 rounded-2xl p-5 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Total Investasi Aset Fisik
-            </p>
-            <h3 className="text-xl font-black text-teal-700 mt-1">{formatRp(totalAssetsValue)}</h3>
+        {/* Ringkasan nilai aset setelah penyusutan */}
+        <div className="bg-slate-900 text-white rounded-2xl px-5 py-4 shadow-lg relative overflow-hidden opacity-0 animate-fade-in-up">
+          <div className="absolute -right-16 -top-24 w-56 h-56 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+          <div className="relative flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Nilai Aset Sekarang</p>
+              <p className="text-2xl font-black tabular-nums tracking-tight leading-tight">{formatRp(Math.round(depSummary.book))}</p>
+            </div>
+            <div className="flex items-center gap-6 text-right">
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Harga Beli</p>
+                <p className="text-xs font-black tabular-nums mt-0.5">{formatRp(depSummary.cost)}</p>
+              </div>
+              <div className="w-px h-7 bg-white/10" />
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Penyusutan</p>
+                <p className="text-xs font-black tabular-nums mt-0.5 text-rose-300">−{formatRp(Math.round(depSummary.accumulated))}</p>
+              </div>
+              <div className="w-px h-7 bg-white/10" />
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Susut / Bulan</p>
+                <p className="text-xs font-black tabular-nums mt-0.5">{formatRp(Math.round(depSummary.monthly))}</p>
+              </div>
+            </div>
           </div>
-          <div className="p-3 bg-teal-600 text-white rounded-2xl">
-            <Package className="w-6 h-6" />
+          <div className="relative mt-3.5 flex items-center gap-3">
+            <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full bg-emerald-400 rounded-full animate-bar-grow" style={{ width: `${depSummary.bookPct}%`, animationDelay: "200ms" }} />
+            </div>
+            <span className="text-[10px] font-bold text-slate-400 tabular-nums shrink-0">{depSummary.bookPct.toFixed(0)}% nilai tersisa</span>
           </div>
         </div>
 
         {/* Display Items List */}
         <div className="space-y-4">
-          {filteredInventory.length === 0 ? (
+          {itemsWithDep.length === 0 ? (
             <div className="bg-white border border-slate-100 rounded-2xl p-12 text-center text-slate-400 font-semibold shadow-sm">
               Belum ada aset terdaftar.
             </div>
           ) : (
-            filteredInventory.map((item) => {
-              const life = calculateLifespan(item.purchase_date, item.lifespan_months);
-              const isDepreciated = life.remaining === 0;
+            itemsWithDep.map(({ item, dep }, idx) => {
+              const isDepreciated = dep.isFullyDepreciated;
 
               return (
                 <div
                   key={item.id}
-                  className={`bg-white rounded-2xl p-5 border border-slate-100 shadow-sm relative overflow-hidden group flex flex-col justify-between gap-4`}
+                  style={{ animationDelay: `${80 + idx * 60}ms` }}
+                  className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm relative overflow-hidden group flex flex-col justify-between gap-4 opacity-0 animate-fade-in-up transition-[box-shadow,border-color] duration-300 hover:shadow-md hover:border-slate-200"
                 >
                   <div className="flex justify-between items-start">
                     <div>
@@ -397,11 +400,9 @@ export function InventoryView() {
                         </span>
                       </div>
                       <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                        Kategori: <span className="font-bold text-slate-700">{item.category}</span> &bull; Harga:{" "}
-                        <span className="font-bold text-slate-700">{formatRp(item.purchase_price)}</span>
-                      </p>
-                      <p className="text-[9px] text-slate-400 font-medium mt-0.5">
-                        Dibeli: {item.purchase_date} &bull; Sumber: {item.source}
+                        {item.category} &bull; Dibeli{" "}
+                        {new Date(`${item.purchase_date}T00:00:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                        {" "}&bull; Masa pakai {item.lifespan_months} bln
                       </p>
                     </div>
 
@@ -423,27 +424,39 @@ export function InventoryView() {
                     </div>
                   </div>
 
-                  {/* Lifespan Progress */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[9px] font-bold">
-                      <span className="text-slate-400 uppercase tracking-wider">
-                        Sisa Masa Depresiasi
-                      </span>
-                      <span className={isDepreciated ? "text-rose-500" : "text-emerald-600"}>
-                        {isDepreciated ? "Aset Habis Nilai" : `${life.remaining} Bulan Tersisa`}
-                      </span>
+                  {/* Rincian penyusutan */}
+                  <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-50 border border-slate-100 p-3">
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Harga Beli</p>
+                      <p className="text-xs font-black text-slate-700 tabular-nums mt-0.5">{formatRp(Number(item.purchase_price))}</p>
                     </div>
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Penyusutan</p>
+                      <p className="text-xs font-black text-rose-600 tabular-nums mt-0.5">−{formatRp(Math.round(dep.accumulated))}</p>
+                      <p className="text-[9px] text-slate-400 font-semibold">{dep.elapsed} bln × {formatRp(Math.round(dep.monthly))}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Nilai Sekarang</p>
+                      <p className={`text-sm font-black tabular-nums mt-0.5 ${isDepreciated ? "text-rose-600" : "text-slate-900"}`}>
+                        {formatRp(Math.round(dep.bookValue))}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
                     <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-700 ${
-                          isDepreciated
-                            ? "bg-rose-500"
-                            : life.pct <= 25
-                            ? "bg-amber-500"
-                            : "bg-teal-500"
+                        className={`h-full rounded-full animate-bar-grow ${
+                          isDepreciated ? "bg-rose-500" : dep.bookPct <= 25 ? "bg-amber-500" : "bg-emerald-500"
                         }`}
-                        style={{ width: `${life.pct}%` }}
+                        style={{ width: `${dep.bookPct}%`, animationDelay: `${200 + idx * 60}ms` }}
                       />
+                    </div>
+                    <div className="flex justify-between text-[10px] font-bold">
+                      <span className="text-slate-500">{dep.bookPct.toFixed(0)}% nilai tersisa</span>
+                      <span className={isDepreciated ? "text-rose-500" : "text-slate-500"}>
+                        {isDepreciated ? "Nilai buku habis" : `${dep.remainingMonths} bulan lagi · susut ${formatRp(Math.round(dep.monthly))}/bln`}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -481,18 +494,12 @@ export function InventoryView() {
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 Kategori Aset
               </label>
-              <select
-                required
-                value={editCategoryName}
-                onChange={(e) => setEditCategoryName(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 p-3 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-              >
-                {categoryOptions.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <CategorySelect
+                categories={categories}
+                type="inventory"
+                value={editCategoryId}
+                onChange={setEditCategoryId}
+              />
             </div>
 
             <div>

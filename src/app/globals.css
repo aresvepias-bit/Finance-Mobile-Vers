@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f5f6f4;
+  --foreground: #1a1b19;
 }
 
 @theme inline {
@@ -11,24 +11,53 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  /* Deep Space Navy / Obsidian Overrides */
-  --color-slate-700: #1e293b;
-  --color-slate-800: #121a2e;
-  --color-slate-900: #0a0f1d;
-  --color-slate-950: #050811;
+  /* Abu-abu netral & hitam lembut (charcoal): kontras nyaman, tidak kebiruan */
+  --color-slate-50: #f5f6f4;
+  --color-slate-100: #ecedea;
+  --color-slate-200: #dcddd9;
+  --color-slate-300: #c3c4bf;
+  --color-slate-400: #86877f;
+  --color-slate-500: #5f605a;
+  --color-slate-600: #474843;
+  --color-slate-700: #333430;
+  --color-slate-800: #222320;
+  --color-slate-900: #1a1b19;
+  --color-slate-950: #121311;
 
-  /* Cyber Cyan-Teal Overrides */
-  --color-emerald-50: #f0fdfa;
-  --color-emerald-100: #cffafe;
-  --color-emerald-200: #a5f3fc;
-  --color-emerald-300: #67e8f9;
-  --color-emerald-400: #22d3ee;
-  --color-emerald-500: #06b6d4;
-  --color-emerald-600: #0891b2;
-  --color-emerald-700: #0e7490;
-  --color-emerald-800: #155e75;
-  --color-emerald-900: #164e63;
-  --color-emerald-950: #083344;
+  /* Aksen hijau muda segar (tidak neon): emerald, cyan & teal diarahkan ke palet yang sama */
+  --color-emerald-50: #effaf2;
+  --color-emerald-100: #daf4e1;
+  --color-emerald-200: #b6e8c4;
+  --color-emerald-300: #86d69e;
+  --color-emerald-400: #4fbe72;
+  --color-emerald-500: #2fa656;
+  --color-emerald-600: #248a46;
+  --color-emerald-700: #1f6f3a;
+  --color-emerald-800: #1c5831;
+  --color-emerald-900: #18482a;
+  --color-emerald-950: #0a2815;
+  --color-cyan-50: #effaf2;
+  --color-cyan-100: #daf4e1;
+  --color-cyan-200: #b6e8c4;
+  --color-cyan-300: #86d69e;
+  --color-cyan-400: #4fbe72;
+  --color-cyan-500: #2fa656;
+  --color-cyan-600: #248a46;
+  --color-cyan-700: #1f6f3a;
+  --color-cyan-800: #1c5831;
+  --color-cyan-900: #18482a;
+  --color-cyan-950: #0a2815;
+  --color-teal-50: #effaf2;
+  --color-teal-100: #daf4e1;
+  --color-teal-200: #b6e8c4;
+  --color-teal-300: #86d69e;
+  --color-teal-400: #4fbe72;
+  --color-teal-500: #2fa656;
+  --color-teal-600: #248a46;
+  --color-teal-700: #1f6f3a;
+  --color-teal-800: #1c5831;
+  --color-teal-900: #18482a;
+  --color-teal-950: #0a2815;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -101,7 +130,7 @@ body {
   border-radius: 9999px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(8, 145, 178, 0.4);
+  background: rgba(47, 166, 86, 0.45);
 }
 
 @keyframes slideDown {
@@ -117,4 +146,138 @@ body {
 
 .animate-slide-down {
   animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Popover dropdown (CategorySelect) */
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--popover-shift, -6px)) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-popover-in {
+  animation: popoverIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Bar yang "tumbuh" dari kiri saat muncul */
+@keyframes barGrow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.animate-bar-grow {
+  transform-origin: left center;
+  animation: barGrow 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bar-grow,
+  .animate-fade-in-up {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Toast notifikasi */
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes toastOut {
+  to {
+    opacity: 0;
+    transform: translateX(24px) scale(0.96);
+  }
+}
+@keyframes toastProgress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+@keyframes iconPop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes checkDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-toast-in {
+  animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-toast-out {
+  animation: toastOut 0.22s ease-in both;
+}
+.animate-icon-pop {
+  animation: iconPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 0.08s both;
+}
+.animate-check-draw {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: checkDraw 0.4s ease-out 0.3s forwards;
+}
+.toast-progress {
+  transform-origin: left center;
+  animation-name: toastProgress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast-in,
+  .animate-icon-pop {
+    animation: none;
+  }
+  .animate-check-draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Bar vertikal yang tumbuh dari bawah (grafik proyeksi) */
+@keyframes barGrowY {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+.animate-bar-grow-y {
+  transform-origin: bottom center;
+  animation: barGrowY 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-bar-grow-y {
+    animation: none;
+  }
 }

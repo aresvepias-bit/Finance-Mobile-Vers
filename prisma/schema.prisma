@@ -1,5 +1,6 @@
 datasource db {
   provider = "postgresql"
+  schemas  = ["personal_finance"]
 }
 
 generator client {
@@ -15,6 +16,7 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("users")
+  @@schema("personal_finance")
 }
 
 model Category {
@@ -32,12 +34,14 @@ model Category {
   inventories      Inventory[]
   subscriptions    Subscription[]
   budgets          Budget[]
+  installments     Installment[]
   ecommerceTxns    EcommerceTransaction[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("categories")
+  @@schema("personal_finance")
 }
 
 model Bank {
@@ -46,6 +50,7 @@ model Bank {
   accountNumber  String   @map("account_number")
   initialBalance Decimal  @map("initial_balance") @db.Decimal(15, 2)
   accountType    String   @map("account_type") // "bank" | "ewallet" | "emoney" | "paylater" | "credit_card" | "cash"
+  walletName     String   @default("Pribadi") @map("wallet_name") // dompet/buku: Pribadi, Kontrakan, dll
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -53,8 +58,10 @@ model Bank {
   deposits         Deposit[]
   ecommerceTxns    EcommerceTransaction[]
   subscriptions    Subscription[]
+  installments     Installment[]
 
   @@map("banks")
+  @@schema("personal_finance")
 }
 
 model Transaction {
@@ -74,8 +81,10 @@ model Transaction {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   ecommerceTxn   EcommerceTransaction?
+  installmentPayment InstallmentPayment?
 
   @@map("transactions")
+  @@schema("personal_finance")
 }
 
 model FixedCost {
@@ -90,6 +99,7 @@ model FixedCost {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@map("fixed_costs")
+  @@schema("personal_finance")
 }
 
 model Deposit {
@@ -107,6 +117,7 @@ model Deposit {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("deposits")
+  @@schema("personal_finance")
 }
 
 model Crypto {
@@ -118,6 +129,7 @@ model Crypto {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("cryptos")
+  @@schema("personal_finance")
 }
 
 model EcommercePlatform {
@@ -130,6 +142,7 @@ model EcommercePlatform {
   transactions EcommerceTransaction[]
 
   @@map("ecommerce_platforms")
+  @@schema("personal_finance")
 }
 
 model EcommerceTransaction {
@@ -152,6 +165,7 @@ model EcommerceTransaction {
   inventories  Inventory[]
 
   @@map("ecommerce_transactions")
+  @@schema("personal_finance")
 }
 
 model Inventory {
@@ -170,6 +184,7 @@ model Inventory {
   updatedAt      DateTime             @updatedAt @map("updated_at")
 
   @@map("inventory")
+  @@schema("personal_finance")
 }
 
 model Subscription {
@@ -188,6 +203,7 @@ model Subscription {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("subscriptions")
+  @@schema("personal_finance")
 }
 
 model Budget {
@@ -196,9 +212,92 @@ model Budget {
   categoryId String   @map("category_id")
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   limit      Decimal  @db.Decimal(15, 2)
+  note       String?  // catatan bebas, misal "KPR BTN s/d 2040"
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@unique([month, categoryId])
   @@map("budgets")
+  @@schema("personal_finance")
+}
+
+// Cicilan / hutang berjangka (KPR, kendaraan, pinjaman, dll)
+model Installment {
+  id               String   @id @default(uuid())
+  name             String
+  lender           String?  // pemberi pinjaman, misal "BTN"
+  monthlyAmount    Decimal  @map("monthly_amount") @db.Decimal(15, 2)
+  tenorMonths      Int      @map("tenor_months")
+  startDate        DateTime @map("start_date") @db.Date // jatuh tempo cicilan pertama
+  initialPaidCount Int      @default(0) @map("initial_paid_count") // sudah dibayar sebelum dicatat di aplikasi
+  categoryId       String   @map("category_id")
+  category         Category @relation(fields: [categoryId], references: [id])
+  bankId           String   @map("bank_id")
+  bank             Bank     @relation(fields: [bankId], references: [id])
+  note             String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  payments InstallmentPayment[]
+
+  @@map("installments")
+  @@schema("personal_finance")
+}
+
+// Pembayaran cicilan; selalu terhubung ke transaksi pengeluaran
+model InstallmentPayment {
+  id            String      @id @default(uuid())
+  installmentId String      @map("installment_id")
+  installment   Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  transactionId String      @unique @map("transaction_id")
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  periodNumber  Int         @map("period_number") // cicilan ke-berapa
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@map("installment_payments")
+  @@schema("personal_finance")
+}
+
+// Pos alokasi (amplop virtual): pembagian sisa gaji, uang tetap di rekening
+model Pocket {
+  id           String   @id @default(uuid())
+  name         String
+  percent      Decimal  @default(0) @db.Decimal(5, 2) // % dari sisa bulanan
+  targetAmount Decimal? @map("target_amount") @db.Decimal(15, 2)
+  note         String?
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  entries PocketEntry[]
+
+  @@map("pockets")
+  @@schema("personal_finance")
+}
+
+// Mutasi saldo pos: alokasi (+), isi manual (+), pakai (-)
+model PocketEntry {
+  id        String   @id @default(uuid())
+  pocketId  String   @map("pocket_id")
+  pocket    Pocket   @relation(fields: [pocketId], references: [id], onDelete: Cascade)
+  type      String   // "allocate" | "deposit" | "withdraw"
+  amount    Decimal  @db.Decimal(15, 2) // bertanda: + masuk, - keluar
+  month     String?  // YYYY-MM, untuk alokasi sisa bulanan
+  date      DateTime @db.Date
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([pocketId])
+  @@map("pocket_entries")
+  @@schema("personal_finance")
+}
+
+// Pengaturan aplikasi (key-value), misal rencana pemasukan untuk proyeksi tahunan
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+  @@schema("personal_finance")
 }

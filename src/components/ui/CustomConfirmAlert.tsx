@@ -2,20 +2,11 @@
 
 import React, { useEffect } from "react";
 import { useAppState } from "@/hooks/useAppState";
-import { AlertTriangle, CheckCircle2, XCircle, Info, X } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+import { Toaster } from "./Toaster";
 
 export function CustomConfirmAlert() {
-  const { confirmState, alertState, hideAlert } = useAppState();
-
-  // Auto-dismiss alert after 3 seconds
-  useEffect(() => {
-    if (alertState.isOpen) {
-      const timer = setTimeout(() => {
-        hideAlert();
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [alertState.isOpen, hideAlert]);
+  const { confirmState } = useAppState();
 
   // Handle ESC key to close confirmation modal
   useEffect(() => {
@@ -32,37 +23,8 @@ export function CustomConfirmAlert() {
 
   return (
     <>
-      {/* 1. Custom Alert Banner / Toast (Slides down from top-center) */}
-      {alertState.isOpen && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[60] flex items-center justify-between gap-4 px-4 py-3 rounded-2xl shadow-xl border animate-slide-down bg-white max-w-sm w-full mx-4 sm:mx-0">
-          <div className="flex items-center gap-3">
-            {alertState.type === "success" && (
-              <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-xl">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-            )}
-            {alertState.type === "error" && (
-              <div className="p-1.5 bg-rose-50 text-rose-600 rounded-xl">
-                <XCircle className="w-5 h-5" />
-              </div>
-            )}
-            {alertState.type === "info" && (
-              <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-xl">
-                <Info className="w-5 h-5" />
-              </div>
-            )}
-            <p className="text-xs font-semibold text-slate-700 leading-snug">
-              {alertState.message}
-            </p>
-          </div>
-          <button
-            onClick={hideAlert}
-            className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      {/* 1. Notifikasi toast */}
+      <Toaster />
 
       {/* 2. Custom Confirm Dialog (Slides down from top-center with blurred backdrop) */}
       {confirmState.isOpen && (

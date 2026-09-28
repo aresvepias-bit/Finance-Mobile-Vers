@@ -2,16 +2,21 @@
 
 import React, { useState, useMemo } from "react";
 import { useAppState } from "@/hooks/useAppState";
-import {
-  TrendingUp,
-  Percent,
-  Plus,
-  Trash2,
-  Calendar,
-  AlertCircle,
-  PiggyBank,
-  CheckCircle,
-} from "lucide-react";
+import { CategorySelect } from "./ui/CategorySelect";
+import { CategoryIcon, getCategoryColor } from "./ui/categoryVisuals";
+import { BudgetSummary } from "./budget/BudgetSummary";
+import { BudgetGroupCard } from "./budget/BudgetGroupCard";
+import { BudgetProjection } from "./budget/BudgetProjection";
+import { computeBudgetUsage, type BudgetLine } from "@/lib/budgets";
+import { downloadBudgetCsv, printBudgetReport } from "@/lib/budgetReport";
+import { AlertCircle, PiggyBank, Plus, Target } from "lucide-react";
+
+const currentMonth = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+
+type SortMode = "name" | "usage";
 
 export function BudgetView() {
   const {
@@ -23,30 +28,18 @@ export function BudgetView() {
     copyBudgets,
     showConfirm,
     showAlert,
+    formatRp,
   } = useAppState();
 
-  const [budgetMonth, setBudgetMonth] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
-
-  const [filterMonth, setFilterMonth] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
+  const [budgetMonth, setBudgetMonth] = useState(currentMonth);
+  const [filterMonth, setFilterMonth] = useState(currentMonth);
+  const [sortMode, setSortMode] = useState<SortMode>("usage");
+  const [view, setView] = useState<"monthly" | "yearly">("monthly");
 
   // Form states
   const [budgetCategory, setBudgetCategory] = useState("");
   const [budgetAmount, setBudgetAmount] = useState("");
-
-  const formatRp = (val: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(val);
-  };
+  const [budgetNote, setBudgetNote] = useState("");
 
   const cleanNumber = (str: string) => {
     const clean = str.replace(/\D/g, "");
@@ -58,88 +51,38 @@ export function BudgetView() {
     setter(num ? new Intl.NumberFormat("id-ID").format(num) : "");
   };
 
-  // Build category hierarchy options for dropdown
-  const categoryOptions = useMemo(() => {
-    const parents = categories.filter((c) => c.type === "expense" && !c.parentId);
-    const list: { id: string; name: string; isParent: boolean; parentName?: string }[] = [];
+  // Realisasi budget bulan terpilih, dikelompokkan per kategori utama
+  const usage = useMemo(
+    () => computeBudgetUsage(budgets, transactions, categories, filterMonth),
+    [budgets, transactions, categories, filterMonth]
+  );
 
-    parents.forEach((p) => {
-      const children = categories.filter((c) => c.parentId === p.id);
-      if (children.length > 0) {
-        list.push({ id: p.id, name: p.name, isParent: true });
-        children.forEach((ch) => {
-          list.push({ id: ch.id, name: ch.name, isParent: false, parentName: p.name });
-        });
-      } else {
-        list.push({ id: p.id, name: p.name, isParent: false });
-      }
-    });
+  const sortedGroups = useMemo(() => {
+    const list = [...usage.groups];
+    if (sortMode === "usage") {
+      const pct = (spent: number, limit: number) => (limit > 0 ? spent / limit : 0);
+      list.sort((a, b) => pct(b.spent, b.limit) - pct(a.spent, a.limit));
+    }
     return list;
-  }, [categories]);
+  }, [usage.groups, sortMode]);
 
-  // Filter budgets and calculate category expenditures
-  const budgetsThisMonth = useMemo(() => {
-    const list = budgets.filter((b) => b.month === filterMonth);
+  const unbudgetedTotal = usage.unbudgeted.reduce((s, u) => s + u.spent, 0);
 
-    // Calculate actual expenditure per category for this month
-    const spentPerCat: Record<string, number> = {};
-    transactions.forEach((t) => {
-      const tMonth = t.date ? t.date.slice(0, 7) : "";
-      if (tMonth !== filterMonth) return;
+  // Isi form dari budget yang sudah ada (untuk ubah limit / catatan)
+  const handleEditLine = (line: BudgetLine) => {
+    setBudgetMonth(line.month);
+    setBudgetCategory(line.categoryId);
+    setBudgetAmount(new Intl.NumberFormat("id-ID").format(line.limit));
+    setBudgetNote(line.note || "");
+  };
 
-      if (t.type === "expense" && t.category !== "Transfer Keluar") {
-        const cat = t.category || "Lainnya";
-        spentPerCat[cat] = (spentPerCat[cat] || 0) + (Number(t.amount) || 0);
-      }
-    });
-
-    let totalAllocated = 0;
-    let totalSpent = 0;
-
-    const data = list.map((b) => {
-      const spent = spentPerCat[b.category] || 0;
-      const limit = Number(b.limit) || 0;
-      totalAllocated += limit;
-      totalSpent += spent;
-
-      const pctRaw = limit > 0 ? (spent / limit) * 100 : 0;
-      const pct = Math.min(100, Math.round(pctRaw));
-
-      let colorClass = "bg-emerald-500";
-      let bgClass = "bg-emerald-50 border-emerald-100 text-emerald-600";
-      if (pct >= 90) {
-        colorClass = "bg-rose-500";
-        bgClass = "bg-rose-50 border-rose-100 text-rose-600";
-      } else if (pct >= 75) {
-        colorClass = "bg-amber-500";
-        bgClass = "bg-amber-50 border-amber-100 text-amber-600";
-      }
-
-      const remaining = limit - spent;
-      const isOver = remaining < 0;
-
-      return {
-        ...b,
-        limit,
-        spent,
-        pct,
-        pctRaw,
-        remaining,
-        isOver,
-        colorClass,
-        bgClass,
-      };
-    });
-
-    const totalPct = totalAllocated > 0 ? Math.round((totalSpent / totalAllocated) * 100) : 0;
-
-    return {
-      budgets: data,
-      totalAllocated,
-      totalSpent,
-      totalPct,
-    };
-  }, [budgets, transactions, filterMonth]);
+  // Pasang budget untuk kategori yang belum punya budget
+  const handleQuickBudget = (rootId: string) => {
+    setBudgetMonth(filterMonth);
+    setBudgetCategory(rootId);
+    setBudgetAmount("");
+    setBudgetNote("");
+  };
 
   // Submit budget
   const handleSubmit = async (e: React.FormEvent) => {
@@ -156,13 +99,10 @@ export function BudgetView() {
       return;
     }
 
-    // Resolve Category Name (use parent if subcategory)
-    const parts = budgetCategory.split(" - ");
-    const categoryName = parts.length > 1 ? parts[0] : budgetCategory;
-
-    const res = await saveBudget(budgetMonth, categoryName, cleanAmt);
+    const res = await saveBudget(budgetMonth, budgetCategory, cleanAmt, budgetNote);
     if (res.status === "success") {
       setBudgetAmount("");
+      setBudgetNote("");
       showAlert("Budget berhasil disimpan!", "success");
     } else {
       showAlert(res.message || "Gagal menyimpan budget.", "error");
@@ -186,19 +126,11 @@ export function BudgetView() {
   };
 
   // Copy budgets from last month
-  const handleCopyLastMonthBudget = async () => {
-    const [yearStr, monthStr] = filterMonth.split("-");
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr, 10);
-    
-    let prevYear = year;
-    let prevMonth = month - 1;
-    if (prevMonth === 0) {
-      prevMonth = 12;
-      prevYear = year - 1;
-    }
-    const prevMonthString = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
-    
+  const handleCopyLastMonthBudget = () => {
+    const [year, month] = filterMonth.split("-").map(Number);
+    const prev = new Date(year, month - 2, 1);
+    const prevMonthString = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+
     showConfirm(
       `Salin semua limit budget dari bulan lalu (${prevMonthString}) ke bulan saat ini (${filterMonth})?\n\nCatatan: Ini akan menimpa limit budget kategori yang sama di bulan ini.`,
       async () => {
@@ -213,19 +145,70 @@ export function BudgetView() {
     );
   };
 
+  const handleExportCsv = () => {
+    downloadBudgetCsv(usage, filterMonth);
+    showAlert("Laporan Excel (CSV) berhasil diunduh!", "success");
+  };
+
+  const handlePrint = () => {
+    if (!printBudgetReport(usage, filterMonth)) {
+      showAlert("Pop-up diblokir browser. Izinkan pop-up untuk mencetak laporan.", "error");
+    }
+  };
+
+  const viewTabs = (
+    <div className="flex bg-white border border-slate-100 shadow-sm p-1 rounded-xl w-fit">
+      {(
+        [
+          ["monthly", "Bulanan"],
+          ["yearly", "Proyeksi Tahunan"],
+        ] as const
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => setView(id)}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${
+            view === id ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (view === "yearly") {
+    return (
+      <div className="space-y-5">
+        {viewTabs}
+        <BudgetProjection />
+      </div>
+    );
+  }
+
   return (
+    <div className="space-y-5">
+      {viewTabs}
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Form Column */}
       <div className="lg:col-span-1 space-y-6">
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-4">
-            Set Batasan Anggaran
-          </h3>
+        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm lg:sticky lg:top-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+              <Target className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Set Anggaran</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">Batas belanja per kategori tiap bulan</p>
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Month */}
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                Pilih Bulan
+                Bulan
               </label>
               <input
                 type="month"
@@ -241,24 +224,16 @@ export function BudgetView() {
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                 Kategori Pengeluaran
               </label>
-              <select
-                required
+              <CategorySelect
+                categories={categories}
+                type="expense"
                 value={budgetCategory}
-                onChange={(e) => setBudgetCategory(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 p-3 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-              >
-                <option value="">-- Pilih Kategori --</option>
-                {categoryOptions.map((opt, i) => (
-                  <option
-                    key={i}
-                    value={opt.isParent ? opt.name : `${opt.parentName} - ${opt.name}`}
-                    disabled={opt.isParent}
-                    className={opt.isParent ? "font-bold bg-slate-100 text-slate-800" : ""}
-                  >
-                    {opt.isParent ? `● ${opt.name.toUpperCase()}` : `   └─ ${opt.name}`}
-                  </option>
-                ))}
-              </select>
+                onChange={setBudgetCategory}
+                placeholder="Pilih kategori / subkategori"
+              />
+              <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">
+                Pilih kategori utama untuk budget umum, atau subkategori (misal KPR Rumah) untuk rincian.
+              </p>
             </div>
 
             {/* Amount */}
@@ -268,149 +243,143 @@ export function BudgetView() {
               </label>
               <input
                 type="text"
+                inputMode="numeric"
                 required
                 value={budgetAmount}
                 onChange={(e) => handleAmountChange(e.target.value, setBudgetAmount)}
                 placeholder="Rp 0"
+                className="w-full rounded-xl border border-slate-200 p-3 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+            </div>
+
+            {/* Note */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Catatan <span className="normal-case font-semibold text-slate-300">(opsional)</span>
+              </label>
+              <input
+                type="text"
+                value={budgetNote}
+                onChange={(e) => setBudgetNote(e.target.value)}
+                maxLength={120}
+                placeholder="Misal: KPR BTN, tenor s/d 2040"
                 className="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-md shadow-emerald-100 transition-transform hover:scale-[1.01]"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-md shadow-emerald-100 transition-transform hover:scale-[1.01] flex items-center justify-center gap-1.5"
             >
-              Simpan Limit Budget
+              <Plus className="w-4 h-4" /> Simpan Limit Budget
             </button>
           </form>
         </div>
       </div>
 
-      {/* Grid Display Column */}
+      {/* Display Column */}
       <div className="lg:col-span-2 space-y-6">
-        {/* Total Summary */}
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Monitoring Anggaran
+        <BudgetSummary
+          usage={usage}
+          month={filterMonth}
+          onMonthChange={setFilterMonth}
+          onCopyLastMonth={handleCopyLastMonthBudget}
+          onExportCsv={handleExportCsv}
+          onPrint={handlePrint}
+          formatRp={formatRp}
+        />
+
+        {usage.groups.length === 0 ? (
+          <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-10 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+              <PiggyBank className="w-6 h-6" />
+            </div>
+            <p className="text-sm font-bold text-slate-700 mt-3">Belum ada budget untuk bulan ini</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Isi form di kiri, atau klik <span className="font-bold">Salin bulan lalu</span> untuk memakai budget sebelumnya.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Sort control */}
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                {usage.groups.length} kategori dianggarkan
               </p>
-              <h3 className="text-xl font-black text-slate-800 mt-1">
-                {formatRp(budgetsThisMonth.totalSpent)} /{" "}
-                <span className="text-slate-400 font-bold">
-                  {formatRp(budgetsThisMonth.totalAllocated)}
-                </span>
-              </h3>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={handleCopyLastMonthBudget}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 text-[10px] font-bold rounded-xl transition-all border border-emerald-100 shadow-sm cursor-pointer"
-                title="Salin semua limit budget dari bulan lalu ke bulan ini"
-              >
-                <Plus className="w-3.5 h-3.5 text-emerald-500 animate-pulse" /> Salin Budget Bulan Lalu
-              </button>
-
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Filter:
-                </span>
-                <input
-                  type="month"
-                  value={filterMonth}
-                  onChange={(e) => setFilterMonth(e.target.value)}
-                  className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 bg-white outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-sm"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-700 ${
-                budgetsThisMonth.totalPct >= 90
-                  ? "bg-rose-500"
-                  : budgetsThisMonth.totalPct >= 75
-                  ? "bg-amber-500"
-                  : "bg-emerald-600"
-              }`}
-              style={{ width: `${Math.min(100, budgetsThisMonth.totalPct)}%` }}
-            />
-          </div>
-
-          <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-            <span>Terpakai: {budgetsThisMonth.totalPct}%</span>
-            <span>
-              Sisa Limit:{" "}
-              {formatRp(Math.max(0, budgetsThisMonth.totalAllocated - budgetsThisMonth.totalSpent))}
-            </span>
-          </div>
-        </div>
-
-        {/* Display Items List */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {budgetsThisMonth.budgets.length === 0 ? (
-            <div className="col-span-2 bg-white border border-slate-100 rounded-2xl p-12 text-center text-slate-400 font-semibold shadow-sm">
-              Belum ada limit budget diatur untuk bulan ini.
-            </div>
-          ) : (
-            budgetsThisMonth.budgets.map((b) => (
-              <div
-                key={b.id}
-                className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm relative overflow-hidden group flex flex-col justify-between min-h-[140px]"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`p-2 rounded-xl border ${b.bgClass}`}>
-                      <PiggyBank className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="font-extrabold text-slate-800 text-sm leading-none">
-                        {b.category}
-                      </h4>
-                      <p className="text-[10px] text-slate-400 mt-1">Limit: {formatRp(b.limit)}</p>
-                    </div>
-                  </div>
-
+              <div className="flex bg-slate-100 p-0.5 rounded-lg">
+                {(
+                  [
+                    ["usage", "% Terpakai"],
+                    ["name", "Nama"],
+                  ] as [SortMode, string][]
+                ).map(([mode, label]) => (
                   <button
-                    onClick={() => handleDeleteClick(b.id)}
-                    className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 shrink-0"
-                    title="Hapus"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="mt-4">
-                  <div className="flex justify-between text-[10px] font-bold mb-1 items-end">
-                    <span className={`font-semibold ${b.isOver ? "text-rose-600" : "text-slate-600"}`}>
-                      {formatRp(b.spent)} terpakai
-                    </span>
-                    <span className={b.isOver ? "text-rose-600 font-black" : "text-slate-600 font-black"}>
-                      {b.pctRaw.toFixed(0)}%
-                    </span>
-                  </div>
-                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${b.colorClass} rounded-full`}
-                      style={{ width: `${b.pct}%` }}
-                    />
-                  </div>
-                  <p
-                    className={`text-[9px] text-right font-bold mt-1.5 uppercase ${
-                      b.isOver ? "text-rose-500" : "text-slate-400"
+                    key={mode}
+                    type="button"
+                    onClick={() => setSortMode(mode)}
+                    className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${
+                      sortMode === mode ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
                     }`}
                   >
-                    {b.isOver ? `Over budget ${formatRp(Math.abs(b.remaining))}` : `Sisa ${formatRp(b.remaining)}`}
-                  </p>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              {sortedGroups.map((g) => (
+                <BudgetGroupCard
+                  key={g.rootId}
+                  group={g}
+                  formatRp={formatRp}
+                  onEdit={handleEditLine}
+                  onDelete={handleDeleteClick}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Pengeluaran tanpa budget */}
+        {usage.unbudgeted.length > 0 && (
+          <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                  <AlertCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Pengeluaran Tanpa Budget</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Belum ada limit, klik untuk memasang budget</p>
                 </div>
               </div>
-            ))
-          )}
-        </div>
+              <span className="text-sm font-black text-slate-900 tabular-nums">{formatRp(unbudgetedTotal)}</span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {usage.unbudgeted.map((u) => {
+                const color = getCategoryColor(u.rootName);
+                return (
+                  <button
+                    key={u.rootId}
+                    type="button"
+                    onClick={() => handleQuickBudget(u.rootId)}
+                    className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white pl-1.5 pr-3 py-1.5 hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors"
+                    title={`Pasang budget untuk ${u.rootName}`}
+                  >
+                    <span className={`w-6 h-6 rounded-md ${color.chip} ring-1 inline-flex items-center justify-center`}>
+                      <CategoryIcon name={u.rootName} className="w-3.5 h-3.5" />
+                    </span>
+                    <span className="text-xs font-bold text-slate-700">{u.rootName}</span>
+                    <span className="text-[10px] font-bold text-slate-500 tabular-nums">{formatRp(u.spent)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
+    </div>
     </div>
   );
 }
