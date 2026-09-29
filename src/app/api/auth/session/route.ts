@@ -1,32 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUsername } from "@/lib/session";
 
 export async function GET(request: Request) {
   try {
-    const url = new URL(request.url);
-    // Find cookie
-    const cookiesHeader = request.headers.get("cookie") || "";
-    const walletSession = cookiesHeader
-      .split(";")
-      .find((c) => c.trim().startsWith("wallet_session="))
-      ?.split("=")[1];
-
-    if (!walletSession) {
-      return NextResponse.json(
-        { status: "error", message: "Sesi tidak ditemukan" },
-        { status: 401 }
-      );
+    const username = await getSessionUsername(request);
+    if (!username) {
+      return NextResponse.json({ status: "error", message: "Sesi tidak ditemukan" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { username: walletSession },
-    });
-
+    const user = await prisma.user.findUnique({ where: { username } });
     if (!user) {
-      return NextResponse.json(
-        { status: "error", message: "User tidak valid" },
-        { status: 401 }
-      );
+      return NextResponse.json({ status: "error", message: "User tidak valid" }, { status: 401 });
     }
 
     return NextResponse.json({

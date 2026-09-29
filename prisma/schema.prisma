@@ -12,6 +12,8 @@ model User {
   username  String   @unique
   pin       String   
   role      String   @default("admin") 
+  failedAttempts Int       @default(0) @map("failed_attempts") // salah PIN berturut-turut
+  lockedUntil    DateTime? @map("locked_until") // dikunci sementara setelah terlalu banyak salah
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

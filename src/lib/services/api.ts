@@ -7,6 +7,10 @@ export interface ApiResult<T = any> {
 const handleResponse = async (res: Response): Promise<ApiResult> => {
   try {
     const data = await res.json();
+    // Sesi habis / tidak valid di endpoint data: minta aplikasi kembali ke layar login
+    if (res.status === 401 && !res.url.includes("/api/auth/") && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("session-expired"));
+    }
     if (!res.ok) {
       return { status: "error", message: data.message || "Request failed" };
     }

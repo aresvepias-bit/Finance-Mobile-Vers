@@ -252,6 +252,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Sesi kedaluwarsa saat aplikasi terbuka: kembali ke layar login
+  useEffect(() => {
+    const onExpired = () => setState((s) => ({ ...s, user: null, syncing: false }));
+    window.addEventListener("session-expired", onExpired);
+    return () => window.removeEventListener("session-expired", onExpired);
+  }, []);
+
   // Validate session on mount
   useEffect(() => {
     async function initSession() {
